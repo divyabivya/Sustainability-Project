@@ -1,7 +1,7 @@
 // importing the MODIS Land Cover dataset which will create the training and testing data
 //the MODIS dataset has wetlands + water categorized on land
 var modisLandCoverDataset = ee.ImageCollection('MODIS/061/MCD12Q1')
- .filterDate('2021-01-01', '2021-12-31')// filtering it to the year 2021
+ .filterDate('2022-01-01', '2022-12-31')// filtering it to the year 2022
  .filterBounds(Region)//filtering it to our region of interest
  .select('LC_Prop3'); //selecting the category which we will use
 
@@ -27,7 +27,7 @@ function maskCloudAndShadows(image) {
 // importing the Sentinel-2 dataset 
 //this will be the satellite images which the model is given to identify wetlands from
 var sentinel2SRCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-    .filterDate('2021-01-01', '2021-12-31') //filtering to the year 2021
+    .filterDate('2022-01-01', '2022-12-31') //filtering to the year 2022
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 10)) //filtering for low cloud coverage (<10%)
     .map(maskCloudAndShadows); //applying SCL masking 
     
