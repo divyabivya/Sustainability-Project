@@ -1,4 +1,4 @@
-# wetlands
+# Optimizing Wetland Classification: The Role of Seasonal and Annual Imagery in Machine Learning
 
 Datasets Used in this Project:
 
