@@ -12,4 +12,6 @@ Training and testing datapoint collection files were created individually.
 
 MODIS Land Cover Dataset was used as a reference when creating wetland, water, and urban datapoints. The datasets were then merged and randomized. Each class was assigned a value. 0 = Wetland, 1 = Water, 2 = Urban. Over 600 datapoints were created to ensure generalizability for the model. 
 
+Region With Data and Region without Data contain the coordinates for the regions I focused on within my project. 
+
 
