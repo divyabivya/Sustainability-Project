@@ -1,0 +1,277 @@
+var Region = ee.FeatureCollection('projects/wetlands-445617/assets/RegionWithData');
+Map.addLayer(Region,{}, 'Region With Data');
+//adding our region of interest, which is where our training and testing data is from
+var Tester = ee.FeatureCollection('projects/wetlands-445617/assets/RegionWithoutData');
+Map.addLayer(Tester, {}, 'Region Without Data');
+//adding our region of interest without data
+//this will help test our model's ability to predict wetlands without any training or testing data in the image
+
+var testingSet= ee.FeatureCollection('projects/wetlands-445617/assets/TestingDatasetFinal');
+Map.addLayer(testingSet, {},'Testing Dataset');
+var trainingSet = ee.FeatureCollection('projects/wetlands-445617/assets/TrainingDatasetFinal');
+Map.addLayer(trainingSet,{}, 'Training Dataset');
+
+//adding our training and testing datasets to the map to display our data
+
+
+// importing the MODIS Land Cover Dataset
+//originally, I used this dataset to create the training and testing data
+//the MODIS dataset has wetlands + water categorized on land
+//this will be displayed so that we have an accurate map of where wetlands truly are, 
+//compared to where our model predicted them to be
+
+var modisLandCoverDataset = ee.ImageCollection('MODIS/061/MCD12Q1')
+ .filterDate('2022-01-01', '2022-12-31')// filtering it to the year 2022
+ .filterBounds(Region)//filtering it to our region of interest
+ .select('LC_Prop3'); //selecting the category which we will use
+
+
+modisLandCoverDataset = modisLandCoverDataset.median(); 
+//taking the median image so we have a single image instead of a collection!
+
+
+// importing the Landsat 9 Satellite Imagery dataset 
+//the variable landsatDataset will be the satellite image which the model is given to identify wetlands from
+var landsatDataset = ee.ImageCollection('LANDSAT/LC09/C02/T1_TOA')
+    .filterDate('2022-03-20', '2022-06-20') //filtering to the year 2022
+    .filter(ee.Filter.lt('CLOUD_COVER', 20));//filtering for low cloud coverage (<20%)
+   print(landsatDataset.size());
+
+
+var dataset = landsatDataset.filterBounds(Region); //filtering to our region of interest
+dataset = dataset.median();
+
+//calculating median of landsat9 imagery to reduce noise + get best image
+
+//visualization parameters for Landsat 9 Satellite Imagery
+var vizParams = {
+  bands: ['B4', 'B3', 'B2'],
+  min: 0,
+  max: 0.5,
+  gamma: 1.2 //to adjust brightness
+  
+};
+
+Map.addLayer(dataset, vizParams, "Landsat 9" );//displaying Landsat 9 Imagery
+ 
+
+// importing elevation dataset to improve model performance and accuracy
+var elevationDataset = ee.Image('USGS/SRTMGL1_003');
+
+
+//normalizing elevation dataset process
+var elevationStats = elevationDataset.reduceRegion({
+  reducer: ee.Reducer.minMax(),
+  geometry: Region, 
+  scale: 30,
+  bestEffort: true
+});
+
+// extract min and max values 
+var elevationMin = ee.Number(elevationStats.get('elevation_min'));
+var elevationMax = ee.Number(elevationStats.get('elevation_max'));
+
+// normalizing the elevation using an expression 
+var elevationNormalized = elevationDataset.expression(
+  '((elevation - elevation_min) / (elevation_max - elevation_min))', {
+    'elevation': elevationDataset,
+    'elevation_min': elevationMin,
+    'elevation_max': elevationMax
+  }
+).rename('elevation_normalized');
+
+//adding a layer which shows all wetlands mapped (from the MODIS Land Cover Dataset)
+var wetlands = modisLandCoverDataset
+  .updateMask(modisLandCoverDataset.eq(27).or(modisLandCoverDataset.eq(50))) //filtering for two types of wetlands in the category we chose!
+  .selfMask(); // masking everything that is not wetlands
+  
+//visualizing our map of wetlands 
+Map.addLayer(wetlands, {
+  palette: ['black'], 
+}, 'Wetlands Map [black]');
+
+
+
+
+
+//creating a texture band which will help our model recognize wetlands
+var texture = dataset.select('B8').reduceNeighborhood({
+  reducer: ee.Reducer.stdDev(), //using standard deviation 
+  kernel: ee.Kernel.square(25)  //25 is the most optimal number //tried and tested!
+}).rename('Texture'); //comparing the variance of each pixel within the 25x25 grid
+
+//computing indices to help our model recognize wetlands
+
+// computing ndvi of our image -> helps model identify wetlands
+var ndvi = dataset.normalizedDifference(['B8', 'B4']).rename('NDVI');
+
+//computing ndwi of our image -> helps model identify wetlands
+var ndwi = dataset.normalizedDifference(['B3', 'B8']).rename('NDWI');
+
+
+
+//computing ndmi of our image -> helps model identify wetlands
+var ndmi = dataset.normalizedDifference(['B8', 'B11']).rename('NDMI');//
+
+
+
+
+// combine all the necessary bands (original bands and computed ones) into the image our model will classify
+var combinedImage = dataset
+  .select(['B2', 'B3', 'B4', 'B8', 'B11'])//selecting which bands we want to use
+  .addBands([ndvi, elevationNormalized, ndwi, ndmi, texture]); //adding our computed indices
+
+
+var trainingDataset = combinedImage.sampleRegions({ //sampling the training values from the image
+    collection: trainingSet,
+    scale: 30,
+    geometries: true
+});
+
+//the sample regions function returns a list for every pixel
+//containing their band and indice values!
+
+var testingDataset = combinedImage.sampleRegions({ // sampling the testing values from the image
+  collection: testingSet, 
+  scale: 30,
+  geometries: true
+});
+//sampleRegions returns a list of properties for each point in the data, such as its texture, amount of red, etc!
+
+
+trainingDataset = trainingDataset.filter(
+  ee.Filter.notNull(['B4'])
+);
+testingDataset = testingDataset.filter(
+  ee.Filter.notNull(['B4'])
+);
+//making sure our datasets have values for the B4 Band
+
+
+
+
+// creating a classifier for land cover classification
+//random forest is the best option because of its ability to handle large datasets with numerous features
+var landCoverClassifier = ee.Classifier.smileRandomForest({
+  numberOfTrees: 150, //# of decision trees
+  variablesPerSplit: 3 //# of variables considered at each split 
+
+});
+
+
+
+landCoverClassifier = landCoverClassifier.train({ //training our classifier using the training data
+   features: trainingDataset, 
+  classProperty: 'class', // replacing with property i assigned training data with
+    inputProperties: ['B2', 'B11', 'B4','NDWI','NDVI', 'elevation_normalized', 'Texture', 'NDMI'] 
+  //these are the properties our classifier will use to determine which land category the pixel is
+
+});
+
+
+
+
+// classifying the image containing data points, using the trained classifier
+var classifiedImage = combinedImage.classify(landCoverClassifier);
+
+
+var wetlandsClassified = classifiedImage.eq(0).selfMask(); 
+//if pixel is equal to 0 -> wetland class, it will set that pixel value to 1, and the other pixels to 0!
+//then the self mask will make all pixels with the value of 0 transparent
+Map.addLayer(wetlandsClassified, {palette: 'orange'}, 'Predicted Wetlands');
+//visualizing the wetlands that the model predicted on the map
+
+
+
+var testingResults = testingDataset.classify(landCoverClassifier);
+//testing our model using the testing dataset
+
+
+// generating a confusion matrix
+var confusionMatrix = testingResults.errorMatrix('class', 'classification');
+print('Confusion Matrix:', confusionMatrix);
+print('F1 score', confusionMatrix.fscore());
+//generating a f1 score to get a better measure of accuracy 
+
+
+
+//calculate overall accuracy
+var overallAccuracy = confusionMatrix.accuracy();
+print('Overall Accuracy:', overallAccuracy); 
+
+print('Class Distribution:', trainingDataset.aggregate_histogram('class'));
+//printing the number of wetland, urban and water points to ensure diversity
+
+print('Precision:', confusionMatrix.consumersAccuracy()); //percentage of ml model's predictions that were correct
+print('Recall:', confusionMatrix.producersAccuracy()); //out of all the pixels, how many did ml model classify correctly?
+
+
+//end of work with region with data
+//testing model on a region with zero training or testing data
+
+
+//now, we will test the model by making it classify an image without any previous testing/training data on it. 
+
+//repeating all previous steps, but now just giving the model the image to classify.
+
+//creating a satellite image for our model to classify without any training data on it
+var testerimg = landsatDataset.filterBounds(Tester); 
+testerimg = testerimg.median();
+//creating the satellite image
+//filtering to the region of interest
+//taking the median image to reduce the noise and get the best image
+
+//normalizing elevation dataset process
+elevationStats = elevationDataset.reduceRegion({
+  reducer: ee.Reducer.minMax(),
+  geometry: Tester, 
+  scale: 30,
+  bestEffort: true
+});
+
+// extracting min and max values 
+elevationMin = ee.Number(elevationStats.get('elevation_min'));
+elevationMax = ee.Number(elevationStats.get('elevation_max'));
+
+// normalizing the elevation using an expression 
+elevationNormalized = elevationDataset.expression(
+  '((elevation - elevation_min) / (elevation_max - elevation_min))', {
+    'elevation': elevationDataset,
+    'elevation_min': elevationMin,
+    'elevation_max': elevationMax
+  }
+).rename('elevation_normalized');
+
+//creating a texture map of our new region of interest to help our model 
+texture = testerimg.select('B8').reduceNeighborhood({
+  reducer: ee.Reducer.stdDev(),
+  kernel: ee.Kernel.square(25)  //25 is the most optimal number //tried and tested!
+}).rename('Texture');
+
+
+// computing ndvi of our image 
+ndvi = testerimg.normalizedDifference(['B8', 'B4']).rename('NDVI');
+
+//computing ndwi of our image 
+ndwi = testerimg.normalizedDifference(['B3', 'B8']).rename('NDWI');
+
+
+
+//computing ndmi of our image
+ndmi = testerimg.normalizedDifference(['B8', 'B11']).rename('NDMI');
+
+combinedImage = testerimg
+  .select(['B2', 'B3', 'B4', 'B8', 'B11'])
+  .addBands([ndvi, elevationNormalized, ndwi, ndmi, texture]); 
+  //adding the bands to our image needed by the model
+  
+classifiedImage = combinedImage.classify(landCoverClassifier);
+//classifying the image using our classifying model
+
+wetlandsClassified = classifiedImage.eq(0).selfMask(); 
+//if image is equal to 0 -> wetland class, it will set that pixel = to 1, and the others to 0!
+//then the self mask will make all pixels with the value of 0 transparent
+Map.addLayer(wetlandsClassified, {palette: 'orange'}, 'Wetlands Predicted, no training data');
+
+
+
