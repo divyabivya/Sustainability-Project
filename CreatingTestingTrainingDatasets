@@ -1,0 +1,14 @@
+
+// combining water, urban, and wetland points created for training data
+var combinedTrainingPoints = water.merge(urban).merge(wetland);
+
+
+var datasetWithRandom = combinedTrainingPoints.randomColumn(); //randomizing our values 
+
+var trainingSet = datasetWithRandom.filter(ee.Filter.lt('random', 0.8)); //this is our training data set
+var testingSet = datasetWithRandom.filter(ee.Filter.gte('random', 0.8));//this is our testing data set, 20% is testing!
+
+Export.table.toAsset(testingSet, 'TestingDataset'); //uploading to google earth engine assets
+Export.table.toAsset(trainingSet, 'TrainingDataset');
+Export.table.toDrive(testingSet, 'TestingDataset'); //downloading as csv files
+Export.table.toDrive(trainingSet, 'TrainingDataset');
