@@ -81,7 +81,7 @@ var vizParams = {
 
 Map.addLayer(display, vizParams, "3. Sentinel-2 Satellite Imagery" );//displaying sentinel 2 imagery of the first region
 Map.addLayer(displaytester, vizParams, "3. Sentinel-2 Satellite Imagery" );//displaying sentinel 2 imagery of the second region
-Map.centerObject(Region, 6); //setting the zoom setting of the map
+Map.centerObject(Region, 5); //setting the zoom setting of the map
 
 //creating the image which our model will be given to predict wetlands from 
 var sentinel2SRCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -301,38 +301,39 @@ wetlandsClassified = classifiedImage.eq(0).selfMask();
 Map.addLayer(wetlandsClassified, {palette: 'orange'}, '1. Wetlands Predicted, no training data on image [orange]');
 
 // adding a title and some explanatory text to a side panel.
-var header = ui.Label('A machine learning model is currently processing and loading  the data, this will take two minutes! \n You will observe the predicted wetlands appear in orange! ', {fontSize: '36px', color: 'red'});
+var header = ui.Label('A machine learning model is currently processing and loading the data, this will take two minutes! \n You will observe the predicted wetlands appear in orange! ', {fontSize: '18px', color: 'red'});
 var text = ui.Label(
     'To further explore, select the drop down "Layers" Button to the left of this text box. Toggle the layers to see the areas where my model predicted wetlands. \n These are the dropdown options from the Layers Button:',
-    {fontSize: '16px', color: 'blue', fontWeight: 'bold'});
-var text9 = ui.Label('6. Region Layers: -->  The Two Region Layers highlight the areas which my ML model was given to predict wetlands in.' , {fontSize: '15px',color: 'blue', fontWeight: 'bold' });
+    {fontSize: '12px', color: 'blue', fontWeight: 'bold'});
+var text9 = ui.Label('6. Region Layers: -->  The Two Region Layers highlight the areas which my ML model was given to predict wetlands in.' , {fontSize: '12px',color: 'blue', fontWeight: 'bold' });
     
         
 var text4 = ui.Label(
   '1. Predicted Wetlands for Region with training/testing Data [orange]: --> The orange areas represent the wetland areas my model predicted.',
-  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+  {fontSize: '12px', color: 'blue', fontWeight: 'bold'});
 var text2 = ui.Label(
   '2. The Wetlands Map [dark green]: --> shows a map of wetlands.',
-  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+  {fontSize: '12px', color: 'blue', fontWeight: 'bold'});
     
     
 
   var text7 = ui.Label(
   'By toggling the predicted wetland layers, you can compare the wetland map and the wetland areas my model predicted',
-  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+  {fontSize: '12px', color: 'blue', fontWeight: 'bold'});
   
     var text1 = ui.Label(
   '3. Sentinel-2 Layers: --> This layer showcases the image given to my model, to identify wetlands from.',
-  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+  {fontSize: '12px', color: 'blue', fontWeight: 'bold'});
   
       var text3 = ui.Label(
   '4. and 5. Training and Testing Dataset: --> These layers represent the points used to train and test my model.',
-  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+  {fontSize: '12px', color: 'blue', fontWeight: 'bold'});
   
 var toolPanel = ui.Panel(
   [header, text, text4, text2, text1, text3, text9, text7],  
   ui.Panel.Layout.flow('vertical'),  
-  {width: '400px'}  
+  {width: '300px'}  
 );
 
 ui.root.add(toolPanel);  
+
