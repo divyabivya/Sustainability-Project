@@ -326,7 +326,7 @@ var text2 = ui.Label(
   {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
   
       var text3 = ui.Label(
-  '4. and 5. Training and Testing Dataset: --> Theese layers represent the points used to train and test my model.',
+  '4. and 5. Training and Testing Dataset: --> These layers represent the points used to train and test my model.',
   {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
   
 var toolPanel = ui.Panel(
