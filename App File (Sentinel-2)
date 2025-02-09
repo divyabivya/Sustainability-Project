@@ -330,7 +330,7 @@ var text2 = ui.Label(
   {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
   
 var toolPanel = ui.Panel(
-  [header, text, text4, text2, text1, text3, text7, text9],  
+  [header, text, text4, text2, text1, text3, text9, text7],  
   ui.Panel.Layout.flow('vertical'),  
   {width: '400px'}  
 );
