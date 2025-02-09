@@ -1,19 +1,19 @@
 var Region = ee.FeatureCollection('projects/wetlands-445617/assets/RegionWithData');
-Map.addLayer(Region,{}, 'Region With Data');
+Map.addLayer(Region,{}, '6. Region With Data');
 //adding our region of interest, which is where our training and testing data is from
 
 var Tester = ee.FeatureCollection('projects/wetlands-445617/assets/RegionWithoutData');
-Map.addLayer(Tester, {}, 'Region Without Data');
+Map.addLayer(Tester, {}, '6. Region Without Data');
 //adding our region of interest without data
 //this will help test our model's ability to predict wetlands without any training or testing data in the image
 
 var testingSet= ee.FeatureCollection('projects/wetlands-445617/assets/TestingDatasetFinal');
-Map.addLayer(testingSet, {},'Testing Dataset');
+Map.addLayer(testingSet, {},'5. Testing Dataset');
 //adding our testing dataset to the map to display our data
 
 
 var trainingSet = ee.FeatureCollection('projects/wetlands-445617/assets/TrainingDatasetFinal');
-Map.addLayer(trainingSet,{}, 'Training Dataset');
+Map.addLayer(trainingSet,{}, '4. Training Dataset');
 //adding our training dataset to the map to display our data
 
 var usaBoundary = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
@@ -24,6 +24,7 @@ var usaBoundary = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 //originally, I used this dataset to create the training and testing data
 //the MODIS dataset has wetlands + water categorized on land
 //this will be displayed so that we have an accurate map of where wetlands truly are, compared to where our model predicted them to be
+
 var modisLandCoverDataset = ee.ImageCollection('MODIS/061/MCD12Q1')
  .filterDate('2022-01-01', '2022-12-31')// filtering it to the year 2022
  .select('LC_Prop3') //selecting the category which we will use
@@ -34,7 +35,7 @@ modisLandCoverDataset = modisLandCoverDataset.median();
 //taking the median image so we have a single image instead of a collection! 
  
 //cloud masking function using SCL
-//this is to improve the quality of our satellite image data we will give to the model
+//this is to improve the quality of our satellite image we will give to the model
 function maskCloudAndShadows(image) {
   //selecting scl band 
   var scl = image.select('SCL');
@@ -51,19 +52,19 @@ function maskCloudAndShadows(image) {
 
 
 // importing the Sentinel-2 Satellite Imagery dataset 
-//creating two images:
+//creating three images:
 //display and displaytester variables are to display the Sentinel-2 Imagery on the map
 //the sentinel2SRCollection variable is the image our model will be given to classify wetlands from
 
 var display = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-.filterDate('2022-01-01', '2022-12-31') //filtering to the year 2022, spring [this season had the highest classification accuracy!!]
+.filterDate('2022-03-20', '2022-06-20') //filtering to the year 2022, spring [this season had the highest classification accuracy!!]
 .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) //filtering for low cloud coverage (<20%)
 .map(maskCloudAndShadows); //applying SCL masking
 display = display.filterBounds(Region);
 display = display.median(); //taking the median image so we have a single image
 
 var displaytester = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-.filterDate('2022-01-01', '2022-12-31') //filtering to the year 2022, spring [this season had the highest classification accuracy!!]
+.filterDate('2022-03-20', '2022-06-20') //filtering to the year 2022, spring [this season had the highest classification accuracy!!]
 .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) //filtering for low cloud coverage (<20%)
 .map(maskCloudAndShadows); //applying SCL masking
 displaytester = displaytester.filterBounds(Tester);
@@ -78,13 +79,13 @@ var vizParams = {
   
 };
 
-Map.addLayer(display, vizParams, "Sentinel-2 Satellite Imagery" );//displaying sentinel 2 imagery of the first region
-Map.addLayer(displaytester, vizParams, "Sentinel-2 Satellite Imagery" );//displaying sentinel 2 imagery of the second region
-Map.centerObject(Region, 5); //setting the zoom setting of the map
+Map.addLayer(display, vizParams, "3. Sentinel-2 Satellite Imagery" );//displaying sentinel 2 imagery of the first region
+Map.addLayer(displaytester, vizParams, "3. Sentinel-2 Satellite Imagery" );//displaying sentinel 2 imagery of the second region
+Map.centerObject(Region, 6); //setting the zoom setting of the map
 
 //creating the image which our model will be given to predict wetlands from 
 var sentinel2SRCollection = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-.filterDate('2022-03-20', '2022-6-20') //filtering to spring of 2022
+.filterDate('2022-03-20', '2022-6-20') //filtering to spring of 2022 
 .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) //filtering for low cloud coverage (<20%)
 .map(maskCloudAndShadows); //applying SCL masking
 
@@ -123,32 +124,35 @@ var elevationNormalized = elevationDataset.expression(
 
 
 
-//adding a map of that highlights wetlands
+//adding a map that highlights wetlands
 var wetlands = modisLandCoverDataset
   .updateMask(modisLandCoverDataset.eq(27).or(modisLandCoverDataset.eq(50))) //filtering for two types of wetlands in the category we chose!
   .selfMask(); // masking everything that is not wetlands
+  
 //visualizing our map of wetlands
-
 Map.addLayer(wetlands, {
   palette: ['#264653'], 
-}, 'Wetlands Map [dark green]');
+}, '2. Wetlands Map [dark green]');
 
 
 //creating a texture band which will help our model recognize wetlands
 var texture = dataset.select('B8').reduceNeighborhood({
   reducer: ee.Reducer.stdDev(), //using standard deviation
-  kernel: ee.Kernel.square(25)  //25 is the most optimal number //tried and tested!
+  kernel: ee.Kernel.square(25)  //25 x 25 grid
 }).rename('Texture'); //comparing the variance of each pixel within the 25x25 grid
 
 //computing indices to help our model recognize wetlands
 
 // computing ndvi of our image -> helps model identify wetlands
+//NDVI = normalized difference vegetation index
 var ndvi = dataset.normalizedDifference(['B8', 'B4']).rename('NDVI');
 
 //computing ndwi of our image -> helps model identify wetlands
+//NDWI = normalized difference water index
 var ndwi = dataset.normalizedDifference(['B3', 'B8']).rename('NDWI');
 
 //computing ndmi of our image -> helps model identify wetlands
+//NDMI = normalized difference moisture index
 var ndmi = dataset.normalizedDifference(['B8', 'B11']).rename('NDMI');
 
 
@@ -160,11 +164,11 @@ var combinedImage = dataset
 
 var trainingDataset = combinedImage.sampleRegions({ //sampling the training values from the image
     collection: trainingSet,
-    scale: 30, //the sample regions function returns a list for every pixel, containing their band and indice values!
+    scale: 30, //the sample regions function returns a list for every datapoint, containing their band and indice values!
     geometries: true
 });
 //repeating the process for the testing dataset
-var testingDataset = combinedImage.sampleRegions({ // sampling the pixel values from the image
+var testingDataset = combinedImage.sampleRegions({ 
   collection: testingSet, 
   scale: 30,
   geometries: true
@@ -208,7 +212,7 @@ var classifiedImage = combinedImage.classify(landCoverClassifier);
 var wetlandsClassified = classifiedImage.eq(0).selfMask(); 
 //if pixel is equal to 0 -> wetland class, it will set that pixel value to 1, and the other pixels to 0!
 //then the self mask will make all pixels with the value of 0 transparent
-Map.addLayer(wetlandsClassified, {palette: 'orange'}, 'Predicted Wetlands for Region with training/testing Data [orange]');
+Map.addLayer(wetlandsClassified, {palette: 'orange'}, '1. Predicted Wetlands for Region with training/testing Data [orange]');
 //visualizing the wetlands that the model predicted on the map
 
 
@@ -216,8 +220,6 @@ Map.addLayer(wetlandsClassified, {palette: 'orange'}, 'Predicted Wetlands for Re
 var testingResults = testingDataset.classify(landCoverClassifier);
 //testing our model using the testing dataset
 
-var featureImportance = ee.Dictionary(landCoverClassifier.explain().get('importance'));
-print(featureImportance); //explains how important each variable was for wetland classification
 
 // generating a confusion matrix
 var confusionMatrix = testingResults.errorMatrix('class', 'classification');
@@ -237,8 +239,8 @@ print('Recall:', confusionMatrix.producersAccuracy()); //out of all the pixels, 
 
 
 
-//now, we will test the model by making it classify an image without any previous testing/training data on it. 
-//repeating all previous steps, but now just giving the model the image to classify.
+//now, we will test the model again by making it classify an image without any previous testing/training data on it. 
+//repeating all previous steps, but now just giving the model a new image to classify.
 
 
 //creating a satellite image for our model to classify without any training data on it
@@ -282,8 +284,6 @@ ndvi = testerimg.normalizedDifference(['B8', 'B4']).rename('NDVI');
 //computing ndwi of our image 
 ndwi = testerimg.normalizedDifference(['B3', 'B8']).rename('NDWI');
 
-
-
 //computing ndmi of our image
 ndmi = testerimg.normalizedDifference(['B8', 'B11']).rename('NDMI');
 
@@ -298,36 +298,41 @@ classifiedImage = combinedImage.classify(landCoverClassifier);
 wetlandsClassified = classifiedImage.eq(0).selfMask(); 
 //if image is equal to 0 -> wetland class, it will set that pixel = to 1, and the others to 0!
 //then the self mask will make all pixels with the value of 0 transparent
-Map.addLayer(wetlandsClassified, {palette: 'orange'}, 'Wetlands Predicted, no training data on image [orange]');
+Map.addLayer(wetlandsClassified, {palette: 'orange'}, '1. Wetlands Predicted, no training data on image [orange]');
 
 // adding a title and some explanatory text to a side panel.
 var header = ui.Label('A machine learning model is currently processing and loading  the data, this will take two minutes! \n You will observe the predicted wetlands appear in orange! ', {fontSize: '36px', color: 'red'});
 var text = ui.Label(
-    'To further explore, select the drop down Layer Button to the left of this text box. Toggle the layers to see the areas where my model predicted wetlands.',
-    {fontSize: '13px', color: 'blue'});
-var text2 = ui.Label('The Two Region Layers highlight the areas which my ML model was given to predict wetlands in. \n Remove those layers! ' , {fontSize: '14px',color: 'blue' });
+    'To further explore, select the drop down "Layers" Button to the left of this text box. Toggle the layers to see the areas where my model predicted wetlands. \n These are the dropdown options from the Layers Button:',
+    {fontSize: '16px', color: 'blue', fontWeight: 'bold'});
+var text9 = ui.Label('6. Region Layers: -->  The Two Region Layers highlight the areas which my ML model was given to predict wetlands in.' , {fontSize: '15px',color: 'blue', fontWeight: 'bold' });
     
         
 var text4 = ui.Label(
-  'The points on the map you see are the data I used to train and test my model!',
-  {fontSize: '13px', color: 'blue'});
+  '1. Predicted Wetlands for Region with training/testing Data [orange]: --> The orange areas represent the wetland areas my model predicted.',
+  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+var text2 = ui.Label(
+  '2. The Wetlands Map [dark green]: --> shows a map of wetlands.',
+  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
+    
     
 
   var text7 = ui.Label(
-  'I discovered that using Spring Imagery resulted in the highest wetland classificaion accuracy across two different satellites. My project displays the satellite and imagery which displayed the highest accuracy, Sentinel-2 Imagery, from Spring 2022.',
-  {fontSize: '13px', color: 'blue'});
+  'By toggling the predicted wetland layers, you can compare the wetland map and the wetland areas my model predicted',
+  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
   
     var text1 = ui.Label(
-  'The Sentinel-2 Layer showcases the image given to my model, to identify wetlands from. \n Uncheck these layers!',
-  {fontSize: '13px', color: 'blue'});
+  '3. Sentinel-2 Layers: --> This layer showcases the image given to my model, to identify wetlands from.',
+  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
   
       var text3 = ui.Label(
-  'The training and testing dataset layers represent the points used to train and test my model.\n The Wetlands Map [dark green] shows a map of wetlands. ',
-  {fontSize: '13px', color: 'blue'});
+  '4. and 5. Training and Testing Dataset: --> Theese layers represent the points used to train and test my model.',
+  {fontSize: '15px', color: 'blue', fontWeight: 'bold'});
   
-  
-  
-  
+var toolPanel = ui.Panel(
+  [header, text, text4, text2, text1, text3, text7, text9],  
+  ui.Panel.Layout.flow('vertical'),  
+  {width: '400px'}  
+);
 
-var toolPanel = ui.Panel([header, text1, text2, text3, text4, text7], 'flow', {width: '400px'});
-ui.root.widgets().add(toolPanel);
+ui.root.add(toolPanel);  
